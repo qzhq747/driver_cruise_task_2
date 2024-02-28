@@ -173,7 +173,7 @@ private:
 	double lastError;		// 上一次误差值
 	double errorIntegral;	// 误差积分值
 
-public:	
+public:
 	void initial(double p, double i, double d, double target)
 	{
 		kp = p;
@@ -192,7 +192,8 @@ public:
 		lastError = error;
 		return kp * error + ki * errorIntegral + kd * derivative;
 	}
-};
+};//高速下方向调整减小
+
 
 /*▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼*\
 █	车辆控制主程序，由ChatGPT自动生成助教完善								█
@@ -210,7 +211,10 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 	\*▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲*/
 	double targetAngleError = 0.0; //目标误差
 	double currentAngleError = atan2(_midline[5][0], _midline[5][1]); //当前误差
-
+	if (_speed > 150)
+		currentAngleError = atan2(_midline[20][0], _midline[20][1]);
+	else if(_speed > 100)
+		currentAngleError = atan2(_midline[10][0], _midline[10][1]);
 	//第一帧初始化舵角控制参数，清空积分器和微分器，因为控制目标为恒零，所以只需要初始化一次
 	if (isFirstFrame)
 	{
@@ -219,12 +223,8 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 	}
 	
 	//舵角PID控制
-	if(_speed<50)
-		*cmdSteer = constrain(-1.0, 1.0, angleController.calculate(currentAngleError));
-	else if(_speed < 100)
-		*cmdSteer = constrain(-0.5, 0.5, angleController.calculate(currentAngleError));
-	else
-		*cmdSteer = constrain(-0.05, 0.05, angleController.calculate(currentAngleError));
+	*cmdSteer = constrain(-1.0, 1.0, angleController.calculate(currentAngleError));
+
 
 	/*▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼*\
 	█	速度控制																█
@@ -286,9 +286,9 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 
 	//设定目标速度，如果前方弯道就设定低，直道就设定高
 	if (minCruve > 300)
-		targetSpeed = 250;
-	else if (minCruve > 150)
 		targetSpeed = 150;
+	else if (minCruve > 150)
+		targetSpeed = 130;
 	else if (minCruve > 100)
 		targetSpeed = 80;
 	else
@@ -326,13 +326,42 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 	else
 	{
 		//减速情况下，刹车
+		//增加循迹刹车功能
 		*cmdAcc = 0;
-		*cmdBrake = 0.3;
+		double abssteer= *cmdSteer;//转向绝对值
+		if (*cmdSteer < 0)
+			abssteer = -*cmdSteer;
+		if (abssteer > 0)
+			if (_speed > 150)
+				*cmdBrake = 0.5;
+			else if (_speed > 100)
+				*cmdBrake = 0.4;
+			else
+				*cmdBrake = 0.3;
+		else {
+			double brake_control = _speed * 0.01;//刹车力度判断
+			if (brake_control > 1.5)
+				*cmdBrake = 1.0;
+			else if (brake_control > 1.4)
+				*cmdBrake = 0.9;
+			else if (brake_control > 1.3)
+				*cmdBrake = 0.8;
+			else if (brake_control > 1.2)
+				*cmdBrake = 0.7;
+			else if (brake_control > 1.1)
+				*cmdBrake = 0.6;
+			else if (brake_control > 1.0)
+				*cmdBrake = 0.5;
+
+			else
+				*cmdBrake = 0.3;
+		}
 	}
 	
 	//更新档位
 	updateGear(cmdGear);
 
 	//窗口可视化
-	cls_visual.Fig2Y(1, 0, 300, 0, 500, 10, "Target V", targetSpeed, "Curvature", minCruve, "Current V", _speed);
+	 cls_visual.Fig2Y(1, -1, 1, 0, 500, 10, "Steer", *cmdSteer, "Current V", targetSpeed,"*brake_control" , *cmdBrake);
+	//cls_visual.Fig2Y(1, 0, 300, 0, 500, 10, "Target V", targetSpeed, "Curvature", minCruve, "Current V", _speed);
 }
