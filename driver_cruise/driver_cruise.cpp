@@ -211,10 +211,11 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 	\*▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲*/
 	double targetAngleError = 0.0; //目标误差
 	double currentAngleError = atan2(_midline[5][0], _midline[5][1]); //当前误差
-	if (_speed > 150)
+	if (_speed > 150)//不同速度下误差∠需要不同设置
 		currentAngleError = atan2(_midline[20][0], _midline[20][1]);
 	else if(_speed > 100)
 		currentAngleError = atan2(_midline[10][0], _midline[10][1]);
+
 	//第一帧初始化舵角控制参数，清空积分器和微分器，因为控制目标为恒零，所以只需要初始化一次
 	if (isFirstFrame)
 	{
@@ -255,7 +256,7 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 	else
 		targetSpeed = 50;
 	*/
-	for (int fStep = 0; fStep < 50; fStep++)//可以调到180
+	for (int fStep = 0; fStep < 50; fStep++)//先检测前50米
 	{
 		myCurve = getR(_midline[fStep][0], _midline[fStep][1], _midline[fStep + 10][0], _midline[fStep + 10][1], _midline[fStep + 20][0], _midline[fStep + 20][1]);
 		if (myCurve.r < minCruve)
@@ -263,7 +264,7 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 			minCruve = myCurve.r;
 		}
 	}
-	for (int fStep = 50; fStep < 100; fStep++)//可以调到180
+	for (int fStep = 50; fStep < 100; fStep++)//检测前100米，在速度稍大（100）的情况下，是否有需要急刹的情况
 	{
 		myCurve = getR(_midline[fStep][0], _midline[fStep][1], _midline[fStep + 10][0], _midline[fStep + 10][1], _midline[fStep + 20][0], _midline[fStep + 20][1]);
 	//探索未来的赛道的最小曲率
@@ -273,7 +274,7 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 			break;
 		}
 	}
-	for (int fStep = 100; fStep < 180; fStep++)//可以调到180
+	for (int fStep = 100; fStep < 180; fStep++)//检测前200米，在速度较大（150）的情况下，是否有需要急刹的情况
 	{
 		myCurve = getR(_midline[fStep][0], _midline[fStep][1], _midline[fStep + 10][0], _midline[fStep + 10][1], _midline[fStep + 20][0], _midline[fStep + 20][1]);
 		//探索未来的赛道的最小曲率
@@ -286,9 +287,9 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 
 	//设定目标速度，如果前方弯道就设定低，直道就设定高
 	if (minCruve > 300)
-		targetSpeed = 150;
+		targetSpeed = 180;
 	else if (minCruve > 150)
-		targetSpeed = 130;
+		targetSpeed = 150;
 	else if (minCruve > 100)
 		targetSpeed = 80;
 	else
@@ -331,14 +332,14 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 		double abssteer= *cmdSteer;//转向绝对值
 		if (*cmdSteer < 0)
 			abssteer = -*cmdSteer;
-		if (abssteer > 0)
+		if (abssteer > 0) //带转向情况下，防抱死刹车
 			if (_speed > 150)
 				*cmdBrake = 0.5;
 			else if (_speed > 100)
 				*cmdBrake = 0.4;
 			else
 				*cmdBrake = 0.3;
-		else {
+		else {//不带转向情况下的防抱死刹车
 			double brake_control = _speed * 0.01;//刹车力度判断
 			if (brake_control > 1.5)
 				*cmdBrake = 1.0;
@@ -362,6 +363,6 @@ static void userDriverSetParam(float* cmdAcc, float* cmdBrake, float* cmdSteer, 
 	updateGear(cmdGear);
 
 	//窗口可视化
-	 cls_visual.Fig2Y(1, -1, 1, 0, 500, 10, "Steer", *cmdSteer, "Current V", targetSpeed,"*brake_control" , *cmdBrake);
+	 cls_visual.Fig2Y(1, -1, 1, 0, 500, 10, "Steer", *cmdSteer, "targetSpeed", targetSpeed,"*brake_control" , *cmdBrake);
 	//cls_visual.Fig2Y(1, 0, 300, 0, 500, 10, "Target V", targetSpeed, "Curvature", minCruve, "Current V", _speed);
 }
